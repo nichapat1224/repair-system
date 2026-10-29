@@ -1,271 +1,358 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  auth, 
-  db, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut,
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  updateDoc, 
-  doc, 
-  serverTimestamp, 
-  query, 
-  orderBy 
-} from './firebase';
+  Wrench, 
+  Monitor, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle, 
+  XCircle, 
+  Search, 
+  Filter, 
+  Plus, 
+  User, 
+  ShieldCheck, 
+  MapPin, 
+  Phone,
+  RefreshCw,
+  LogOut,
+  Lock,
+  Mail
+} from 'lucide-react';
+
+const INITIAL_TICKETS = [
+  {
+    id: 'REP-2026-001',
+    deviceType: 'Computer Set',
+    deviceName: 'PC ห้องคอม 502 - เครื่อง 12',
+    serialNo: 'CS-502-12',
+    location: 'อาคารวิทยบริการ ชั้น 5 (ห้อง Lab 502)',
+    reporterName: 'นักศึกษา สมหญิง (User)',
+    reporterRole: 'นักศึกษา',
+    contactTel: '081-234-5678',
+    issueCategory: 'Hardware',
+    description: 'เครื่องเปิดไม่ติด มีเสียงติ๊ดดังยาว 3 ครั้ง ไฟ power ติดแต่หน้าจอมืด',
+    urgency: 'high',
+    status: 'in_progress',
+    createdAt: '2026-10-24 09:30',
+    technicianNote: 'กำลังเปลี่ยน RAM ตัวใหม่ทดสอบ และทำความสะอาด Slot',
+    timeline: [
+      { status: 'pending', time: '2026-10-24 09:30', note: 'ส่งคำขอแจ้งซ่อมเข้าสู่ระบบเรียบร้อย' },
+      { status: 'in_progress', time: '2026-10-24 13:15', note: 'ช่างสมศักดิ์ รับเรื่องและกำลังเข้าตรวจเช็คอุปกรณ์' }
+    ]
+  },
+  {
+    id: 'REP-2026-002',
+    deviceType: 'Printer',
+    deviceName: 'Printer HP LaserJet Pro (ห้องทะเบียน)',
+    serialNo: 'PR-REG-01',
+    location: 'อาคารอำนวยการ ชั้น 1 (ห้องงานทะเบียน)',
+    reporterName: 'นางสาววิภาดา รักษ์ดี',
+    reporterRole: 'เจ้าหน้าที่',
+    contactTel: '089-999-8888',
+    issueCategory: 'Hardware',
+    description: 'กระดาษติดบ่อย และมีคราบหมึกดำเป็นเส้นตรงกลางแผ่น',
+    urgency: 'medium',
+    status: 'pending',
+    createdAt: '2026-10-25 11:00',
+    technicianNote: '',
+    timeline: [
+      { status: 'pending', time: '2026-10-25 11:00', note: 'ส่งคำขอแจ้งซ่อมเข้าสู่ระบบเรียบร้อย' }
+    ]
+  }
+];
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [isRegister, setIsRegister] = useState(false);
   const [loginRole, setLoginRole] = useState('user');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginName, setLoginName] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
   const [authError, setAuthError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const [tickets, setTickets] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState(null);
-  const [adminUpdateTicket, setAdminUpdateTicket] = useState(null);
-  const [newNote, setNewNote] = useState('');
-  const [updateStatusVal, setUpdateStatusVal] = useState('In Progress');
-
+  const [tickets, setTickets] = useState(INITIAL_TICKETS);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
 
-  const [newDevice, setNewDevice] = useState('');
-  const [newCategory, setNewCategory] = useState('Hardware');
-  const [newLocation, setNewLocation] = useState('');
-  const [newSymptom, setNewSymptom] = useState('');
+  const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [isUpdateStatusOpen, setIsUpdateStatusOpen] = useState(false);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    
-    const q = query(collection(db, "tickets"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ticketsData = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
-      setTickets(ticketsData);
-    }, (error) => {
-      console.error("Firestore Error:", error);
-    });
+  const [formData, setFormData] = useState({
+    deviceType: 'Computer Set',
+    deviceName: '',
+    serialNo: '',
+    location: '',
+    reporterName: '',
+    reporterRole: 'นักศึกษา',
+    contactTel: '',
+    issueCategory: 'Hardware',
+    urgency: 'medium',
+    description: ''
+  });
 
-    return () => unsubscribe();
-  }, [currentUser]);
+  const [updateData, setUpdateData] = useState({
+    status: 'in_progress',
+    note: ''
+  });
 
-  const handleLoginSubmit = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setAuthError('');
-    if (!email || !password) {
-      setAuthError('กรุณากรอกข้อมูลให้ครบถ้วน');
+
+    if (!loginEmail || !loginPassword) {
+      setAuthError('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน');
       return;
     }
 
-    setLoading(true);
-    try {
-      let userRes;
-      if (isRegister) {
-        if (!name) {
-          setAuthError('กรุณากรอกชื่อ-นามสกุล');
-          setLoading(false);
-          return;
-        }
-        userRes = await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        userRes = await signInWithEmailAndPassword(auth, email, password);
-      }
-
-      setCurrentUser({
-        uid: userRes.user.uid,
-        email: userRes.user.email,
-        name: isRegister ? name : (loginRole === 'admin' ? `ช่างเทคนิค (${email.split('@')[0]})` : `ผู้ใช้งาน (${email.split('@')[0]})`),
-        role: loginRole
-      });
-    } catch (err) {
-      setAuthError('อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชีนี้ยังไม่ได้ลงทะเบียน');
-    } finally {
-      setLoading(false);
+    if (isRegister && !loginName) {
+      setAuthError('กรุณากรอกชื่อ-นามสกุล');
+      return;
     }
+
+    const nameVal = isRegister ? loginName : (loginRole === 'admin' ? 'นายช่าง สมชาย (Admin)' : 'นักศึกษา สมหญิง (User)');
+    
+    setCurrentUser({
+      name: nameVal,
+      email: loginEmail,
+      role: loginRole
+    });
+
+    // กำหนดชื่อผู้แจ้งในฟอร์มให้อัตโนมัติเวลา User กดแจ้งซ่อม
+    setFormData(prev => ({ ...prev, reporterName: nameVal }));
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
+  const handleLogout = () => {
     setCurrentUser(null);
+    setLoginEmail('');
+    setLoginPassword('');
+    setLoginName('');
+    setAuthError('');
   };
 
-  const handleAddTicket = async (e) => {
-    e.preventDefault();
-    if (!newDevice || !newLocation || !newSymptom) return;
-
-    setLoading(true);
-    const dateStr = new Date().toLocaleString('th-TH');
-
-    try {
-      await addDoc(collection(db, "tickets"), {
-        ticketCode: `REP-${Date.now().toString().slice(-4)}`,
-        device: newDevice,
-        category: newCategory,
-        location: newLocation,
-        symptom: newSymptom,
-        reporter: currentUser.name,
-        reporterEmail: currentUser.email,
-        date: dateStr,
-        status: 'Pending',
-        note: '',
-        createdAt: serverTimestamp(),
-        timeline: [
-          { status: 'รอดำเนินการ', date: dateStr, detail: 'ส่งคำขอแจ้งซ่อมเข้าสู่ระบบเรียบร้อย' }
-        ]
-      });
-
-      setShowAddModal(false);
-      setNewDevice('');
-      setNewLocation('');
-      setNewSymptom('');
-    } catch (err) {
-      alert("เกิดข้อผิดพลาด: " + err.message);
-    } finally {
-      setLoading(false);
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'pending':
+        return { bg: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock, label: 'รอดำเนินการ' };
+      case 'in_progress':
+        return { bg: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: Wrench, label: 'กำลังดำเนินการซ่อม' };
+      case 'completed':
+        return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2, label: 'ซ่อมเสร็จสิ้น' };
+      case 'cancelled':
+        return { bg: 'bg-rose-50 text-rose-700 border-rose-200', icon: XCircle, label: 'ยกเลิกรายการ' };
+      default:
+        return { bg: 'bg-slate-50 text-slate-700 border-slate-200', icon: AlertCircle, label: 'ไม่ทราบสถานะ' };
     }
   };
 
-  const handleSaveAdminUpdate = async (e) => {
+  // กรองข้อมูลตามสิทธิ์ (User จะเห็นเฉพาะของตัวเอง, Admin เห็นทั้งหมด)
+  const accessibleTickets = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'admin') {
+      return tickets;
+    } else {
+      // User เห็นเฉพาะรายการที่ตนเองเป็นผู้แจ้ง
+      return tickets.filter(t => t.reporterName === currentUser.name);
+    }
+  }, [tickets, currentUser]);
+
+  const stats = useMemo(() => {
+    const total = accessibleTickets.length;
+    const pending = accessibleTickets.filter(t => t.status === 'pending').length;
+    const inProgress = accessibleTickets.filter(t => t.status === 'in_progress').length;
+    const completed = accessibleTickets.filter(t => t.status === 'completed').length;
+    return { total, pending, inProgress, completed };
+  }, [accessibleTickets]);
+
+  const filteredTickets = useMemo(() => {
+    return accessibleTickets.filter(ticket => {
+      const matchesSearch = 
+        ticket.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ticket.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ticket.location.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
+      const matchesCategory = categoryFilter === 'all' || ticket.issueCategory === categoryFilter;
+
+      return matchesSearch && matchesStatus && matchesCategory;
+    });
+  }, [accessibleTickets, searchTerm, statusFilter, categoryFilter]);
+
+  const handleCreateTicket = (e) => {
     e.preventDefault();
-    if (!adminUpdateTicket) return;
+    const newId = `REP-2026-${String(tickets.length + 1).padStart(3, '0')}`;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    
+    const newTicket = {
+      ...formData,
+      id: newId,
+      reporterName: currentUser.name, // ใช้ชื่อผู้ใช้ปัจจุบัน
+      status: 'pending',
+      createdAt: now,
+      technicianNote: '',
+      timeline: [
+        { status: 'pending', time: now, note: 'ส่งคำขอแจ้งซ่อมเข้าสู่ระบบเรียบร้อย' }
+      ]
+    };
 
-    setLoading(true);
-    const dateStr = new Date().toLocaleString('th-TH');
+    setTickets([newTicket, ...tickets]);
+    setIsNewTicketOpen(false);
+    setFormData({
+      deviceType: 'Computer Set',
+      deviceName: '',
+      serialNo: '',
+      location: '',
+      reporterName: currentUser.name,
+      reporterRole: 'นักศึกษา',
+      contactTel: '',
+      issueCategory: 'Hardware',
+      urgency: 'medium',
+      description: ''
+    });
+  };
 
-    let statusText = 'รอดำเนินการ';
-    if (updateStatusVal === 'In Progress') statusText = 'กำลังดำเนินการซ่อม';
-    if (updateStatusVal === 'Completed') statusText = 'ซ่อมเสร็จสิ้น';
-    if (updateStatusVal === 'Cancelled') statusText = 'ยกเลิกรายการ';
+  const handleUpdateStatus = (e) => {
+    e.preventDefault();
+    if (!selectedTicket) return;
 
-    const updatedTimeline = [
-      ...(adminUpdateTicket.timeline || []),
-      { 
-        status: statusText, 
-        date: dateStr, 
-        detail: newNote ? `หมายเหตุช่าง: ${newNote}` : `อัปเดตสถานะเป็น ${statusText}` 
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    
+    const updatedTickets = tickets.map(t => {
+      if (t.id === selectedTicket.id) {
+        const statusText = getStatusBadge(updateData.status).label;
+        const noteEntry = updateData.note 
+          ? `อัปเดตเป็น [${statusText}]: ${updateData.note}`
+          : `อัปเดตสถานะเป็น ${statusText}`;
+        
+        return {
+          ...t,
+          status: updateData.status,
+          technicianNote: updateData.note || t.technicianNote,
+          timeline: [
+            ...t.timeline,
+            { status: updateData.status, time: now, note: noteEntry }
+          ]
+        };
       }
-    ];
+      return t;
+    });
 
-    try {
-      const ticketRef = doc(db, "tickets", adminUpdateTicket.id);
-      await updateDoc(ticketRef, {
-        status: updateStatusVal,
-        note: newNote || adminUpdateTicket.note,
-        timeline: updatedTimeline
-      });
-
-      setAdminUpdateTicket(null);
-      setNewNote('');
-    } catch (err) {
-      alert("เกิดข้อผิดพลาด: " + err.message);
-    } finally {
-      setLoading(false);
-    }
+    setTickets(updatedTickets);
+    setSelectedTicket(updatedTickets.find(t => t.id === selectedTicket.id));
+    setIsUpdateStatusOpen(false);
   };
 
-  const filteredTickets = tickets.filter(t => {
-    const matchesSearch = (t.device || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (t.ticketCode || t.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (t.reporter || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'All' || t.status === filterStatus;
-    const matchesUser = currentUser?.role === 'admin' || t.reporterEmail === currentUser?.email || t.reporter === currentUser?.name;
-    return matchesSearch && matchesStatus && matchesUser;
-  });
-
-  // หน้า Login ดีไซน์ใหม่ สว่าง ไม่มืดทึบ มีมิติระดับพรีเมียม
+  // หน้า Login ดีไซน์พรีเมียม
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex font-sans bg-slate-100">
-        {/* ฝั่งซ้าย: ภาพพื้นหลังสว่าง มีเลเยอร์กระจกแก้ว (Glassmorphism) ครอบ */}
-        <div 
-          className="hidden lg:flex lg:w-3/5 p-16 flex-col justify-between relative overflow-hidden bg-cover bg-center"
-          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=1920&auto=format&fit=crop')` }}
-        >
-          {/* ปรับเลเยอร์ให้สว่างขึ้น ไม่ทึบ เพื่อให้อ่านง่ายและสบายตา */}
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-900/80 via-indigo-900/60 to-slate-900/40 backdrop-blur-[3px]"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4 font-sans">
+        <div className="max-w-md w-full bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20">
           
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="p-3 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl shadow-lg">🛠️</div>
-            <span className="font-extrabold text-white text-xs tracking-widest uppercase">VOCATIONAL DIPLOMA PROJECT</span>
-          </div>
-
-          <div className="relative z-10 space-y-6 my-auto max-w-xl">
-            <span className="px-4 py-1.5 bg-blue-500/30 text-blue-100 border border-blue-300/40 rounded-full text-xs font-bold backdrop-blur-md inline-block shadow-sm">
-              ✨ SMART REPAIR & TRACKING SYSTEM
-            </span>
-            <h1 className="text-5xl font-black text-white leading-tight tracking-tight drop-shadow-lg">
-              Computer Repair & <br />Asset Tracking
-            </h1>
-            <p className="text-slate-100 text-sm leading-relaxed drop-shadow bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/15">
-              ระบบสารสนเทศเพื่อการจัดการและติดตามสถานะงานซ่อมอุปกรณ์คอมพิวเตอร์และครุภัณฑ์แบบเรียลไทม์ รองรับสิทธิ์การใช้งานแยกส่วนระหว่างผู้ใช้และช่างเทคนิค พร้อมเชื่อมต่อ Cloud Database
-            </p>
-          </div>
-
-          <div className="relative z-10 text-xs text-slate-300 font-medium">
-            © 2026 Vocational Diploma Project. Designed for Excellence.
-          </div>
-        </div>
-
-        {/* ฝั่งขวา: ฟอร์มเข้าสู่ระบบ ดีไซน์การ์ดขาวสะอาดตา */}
-        <div className="w-full lg:w-2/5 flex items-center justify-center p-8 sm:p-12 bg-slate-50">
-          <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-slate-200/80 text-slate-800">
-            <div className="text-center mb-6">
-              <div className="inline-flex p-3.5 bg-blue-600 rounded-2xl mb-3 text-white text-xl shadow-lg shadow-blue-500/30 lg:hidden">🛠️</div>
-              <h2 className="text-2xl font-black tracking-tight text-slate-900">เข้าสู่ระบบ</h2>
-              <p className="text-slate-400 text-xs mt-1">กรุณากรอกข้อมูลบัญชีเพื่อเข้าใช้งานระบบ</p>
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-white text-center relative">
+            <div className="inline-flex p-3.5 bg-white/10 backdrop-blur-md rounded-2xl mb-3 shadow-inner border border-white/20">
+              <Monitor className="w-8 h-8 text-white" />
             </div>
+            <h2 className="text-xl font-black tracking-tight">Computer Repair System</h2>
+            <p className="text-blue-100 text-xs mt-1">ระบบแจ้งซ่อมและติดตามสถานะครุภัณฑ์ออนไลน์</p>
+          </div>
 
-            <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200">
+          <div className="p-8">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200/60">
               <button
                 type="button"
                 onClick={() => setLoginRole('user')}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all ${loginRole === 'user' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  loginRole === 'user' ? 'bg-white text-blue-600 shadow-md shadow-slate-200' : 'text-slate-500 hover:text-slate-800'
+                }`}
               >
-                👤 ผู้ใช้งานทั่วไป
+                <User className="w-4 h-4" /> ผู้ใช้งานทั่วไป
               </button>
               <button
                 type="button"
                 onClick={() => setLoginRole('admin')}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all ${loginRole === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  loginRole === 'admin' ? 'bg-white text-indigo-600 shadow-md shadow-slate-200' : 'text-slate-500 hover:text-slate-800'
+                }`}
               >
-                🛡️ ช่างซ่อม / แอดมิน
+                <ShieldCheck className="w-4 h-4" /> ช่างซ่อม / แอดมิน
               </button>
             </div>
 
-            {authError && <div className="mb-4 p-3 bg-rose-50 text-rose-600 rounded-xl text-xs font-medium border border-rose-100">{authError}</div>}
+            <h3 className="text-lg font-black text-slate-800 mb-1">
+              {isRegister ? 'สมัครสมาชิกใหม่' : 'เข้าสู่ระบบ'}
+            </h3>
+            <p className="text-slate-400 text-xs mb-6">
+              {isRegister ? 'กรอกข้อมูลเพื่อสร้างบัญชีผู้ใช้' : `สิทธิ์การเข้าใช้งาน: ${loginRole === 'admin' ? 'ผู้ดูแลระบบและช่างซ่อม' : 'ผู้ใช้งานทั่วไป'}`}
+            </p>
 
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {authError && (
+              <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-xs font-semibold">
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
               {isRegister && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อ-นามสกุล</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="สมชาย ใจดี" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">ชื่อ-นามสกุล</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="text"
+                      value={loginName}
+                      onChange={(e) => setLoginName(e.target.value)}
+                      placeholder="นายสมชาย ใจดี"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                    />
+                  </div>
                 </div>
               )}
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">อีเมล</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@college.ac.th" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">อีเมล (Email)</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="user@college.ac.th"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                  />
+                </div>
               </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">รหัสผ่าน</label>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">รหัสผ่าน (Password)</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all font-medium"
+                  />
+                </div>
               </div>
-              <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/25 transition-all text-xs">
-                {loading ? 'กำลังตรวจสอบ...' : 'เข้าสู่ระบบ'}
+
+              <button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-blue-600/30 text-xs transition-all mt-2 cursor-pointer"
+              >
+                {isRegister ? 'ยืนยันลงทะเบียน' : 'เข้าสู่ระบบ'}
               </button>
             </form>
 
-            <div className="mt-6 text-center text-xs text-slate-500">
+            <div className="mt-6 text-center text-xs text-slate-500 font-medium">
               {isRegister ? 'มีบัญชีอยู่แล้ว?' : 'ยังไม่มีบัญชีใช่หรือไม่?'}{' '}
-              <button onClick={() => setIsRegister(!isRegister)} className="text-blue-600 font-bold hover:underline">
-                {isRegister ? 'เข้าสู่ระบบ' : 'สมัครสมาชิกใหม่'}
+              <button
+                type="button"
+                onClick={() => { setIsRegister(!isRegister); setAuthError(''); }}
+                className="text-blue-600 font-bold hover:underline ml-1 cursor-pointer"
+              >
+                {isRegister ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
               </button>
             </div>
           </div>
@@ -274,225 +361,418 @@ export default function App() {
     );
   }
 
-  // หน้า Dashboard หลัก
+  // หน้า Dashboard หลัก (ดีไซน์พรีเมียม สบายตา แยกสิทธิ์ชัดเจน)
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-800">
-      <nav className="bg-white text-slate-800 px-8 py-4 shadow-sm flex justify-between items-center border-b border-slate-200 sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md text-lg">🛠️</div>
-          <div>
-            <h1 className="font-extrabold text-sm tracking-tight text-slate-900">REPAIR TRACKING SYSTEM</h1>
-            <p className="text-[10px] text-slate-400">ระบบสารสนเทศติดตามงานซ่อมครุภัณฑ์ (Cloud Real-time)</p>
+    <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
+      {/* HEADER */}
+      <header className="bg-slate-900 text-white shadow-lg sticky top-0 z-30 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center space-x-3.5">
+            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-2xl text-white shadow-md shadow-blue-500/20">
+              <Monitor className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-black tracking-tight text-white">
+                Computer Repair Tracking System
+              </h1>
+              <p className="text-[11px] text-slate-400">ระบบสารสนเทศติดตามสถานะงานซ่อมครุภัณฑ์คอมพิวเตอร์ออนไลน์</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-xs font-bold text-slate-700">{currentUser.name}</p>
-            <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full font-bold mt-0.5 ${
-              currentUser.role === 'admin' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
-            }`}>
-              {currentUser.role === 'admin' ? '🛡️ ผู้ดูแลระบบ / ช่างซ่อม' : '👤 ผู้ใช้งานทั่วไป'}
-            </span>
-          </div>
-          <button onClick={handleLogout} className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3.5 py-2 rounded-xl text-xs border border-rose-200 transition-all font-semibold">
-            ออกจากระบบ
-          </button>
-        </div>
-      </nav>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm mb-6 flex justify-between items-center">
-          <div>
-            <p className="text-xs font-extrabold uppercase text-blue-600 tracking-wider">
-              สิทธิ์การใช้งาน: {currentUser.role === 'admin' ? 'Administrator & Technician Portal' : 'Standard User Portal'}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              {currentUser.role === 'admin' 
-                ? 'คุณมีสิทธิ์จัดการภาพรวมระบบ ตรวจสอบสถิติ และอัปเดตขั้นตอนการซ่อมทั้งหมด' 
-                : 'คุณสามารถสร้างรายการแจ้งซ่อม และเปิดหน้าต่างดู Timeline ติดตามความคืบหน้าได้ทันที'}
-            </p>
+          <div className="flex items-center space-x-4">
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-bold text-slate-200">{currentUser.name}</p>
+              <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full font-bold mt-1 ${
+                currentUser.role === 'admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              }`}>
+                {currentUser.role === 'admin' ? '🛡️ ผู้ดูแลระบบ / ช่างซ่อม' : '👤 ผู้ใช้งานทั่วไป'}
+              </span>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md shadow-rose-600/20 flex items-center gap-2 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>ออกจากระบบ</span>
+            </button>
           </div>
+        </div>
+      </header>
+
+      {/* MAIN CONTAINER */}
+      <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        
+        {/* Banner แสดงสิทธิ์ */}
+        <div className={`p-5 rounded-3xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+          currentUser.role === 'admin' ? 'bg-amber-50/80 border-amber-200/80 text-amber-900' : 'bg-blue-50/80 border-blue-200/80 text-blue-900'
+        }`}>
+          <div className="flex items-center space-x-3.5">
+            <div className={`p-3 rounded-2xl ${currentUser.role === 'admin' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'bg-blue-600 text-white shadow-md shadow-blue-600/20'}`}>
+              {currentUser.role === 'admin' ? <ShieldCheck className="w-6 h-6" /> : <User className="w-6 h-6" />}
+            </div>
+            <div>
+              <p className="font-extrabold text-sm">
+                สิทธิ์การใช้งาน: {currentUser.role === 'admin' ? 'ผู้ดูแลระบบ / ช่างซ่อม (Admin & Technician Portal)' : 'ผู้ใช้งานทั่วไป (Standard User Portal)'}
+              </p>
+              <p className="text-xs opacity-75 mt-0.5 font-medium">
+                {currentUser.role === 'admin' 
+                  ? 'คุณสามารถตรวจสอบสถิติภาพรวมทั้งหมด และอัปเดตสถานะขั้นตอนการซ่อมได้' 
+                  : 'คุณสามารถสร้างรายการแจ้งซ่อม และติดตาม Timeline ตรวจสอบสถานะงานซ่อมเฉพาะของคุณได้'}
+              </p>
+            </div>
+          </div>
+
           {currentUser.role === 'user' && (
-            <button onClick={() => setShowAddModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-2xl text-xs font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2">
-              + แจ้งซ่อมอุปกรณ์ใหม่
+            <button
+              onClick={() => {
+                setFormData(prev => ({ ...prev, reporterName: currentUser.name }));
+                setIsNewTicketOpen(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-3 rounded-2xl shadow-lg shadow-blue-600/25 flex items-center space-x-2 transition-all flex-shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ แจ้งซ่อมอุปกรณ์ใหม่</span>
             </button>
           )}
         </div>
 
-        {/* 📊 สถิติแอดมิน */}
+        {/* STATS CARDS (แสดงเฉพาะ Admin เท่านั้น เพื่อไม่ให้ User เห็นภาพรวมทั้งหมดของคนอื่น) */}
         {currentUser.role === 'admin' && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div><p className="text-[11px] text-slate-400 font-bold uppercase">แจ้งซ่อมทั้งหมด</p><h3 className="text-3xl font-black text-slate-800 mt-1">{tickets.length}</h3></div>
-              <div className="p-4 bg-slate-50 rounded-2xl text-xl border border-slate-100">💻</div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400">แจ้งซ่อมทั้งหมด</p>
+                <h3 className="text-3xl font-black text-slate-800 mt-1">{stats.total}</h3>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-2xl text-slate-600 border border-slate-100 text-xl">💻</div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div><p className="text-[11px] text-amber-600 font-bold uppercase">รอดำเนินการ</p><h3 className="text-3xl font-black text-amber-600 mt-1">{tickets.filter(t => t.status === 'Pending').length}</h3></div>
-              <div className="p-4 bg-amber-50 rounded-2xl text-xl border border-amber-100">⏳</div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-amber-600">รอดำเนินการ</p>
+                <h3 className="text-3xl font-black text-amber-600 mt-1">{stats.pending}</h3>
+              </div>
+              <div className="p-4 bg-amber-50 rounded-2xl text-amber-600 border border-amber-100 text-xl">⏳</div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div><p className="text-[11px] text-blue-600 font-bold uppercase">กำลังซ่อมแซม</p><h3 className="text-3xl font-black text-blue-600 mt-1">{tickets.filter(t => t.status === 'In Progress').length}</h3></div>
-              <div className="p-4 bg-blue-50 rounded-2xl text-xl border border-blue-100">🔧</div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-indigo-600">กำลังซ่อมแซม</p>
+                <h3 className="text-3xl font-black text-indigo-600 mt-1">{stats.inProgress}</h3>
+              </div>
+              <div className="p-4 bg-indigo-50 rounded-2xl text-indigo-600 border border-indigo-100 text-xl">🔧</div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div><p className="text-[11px] text-emerald-600 font-bold uppercase">ซ่อมเสร็จสิ้น</p><h3 className="text-3xl font-black text-emerald-600 mt-1">{tickets.filter(t => t.status === 'Completed').length}</h3></div>
-              <div className="p-4 bg-emerald-50 rounded-2xl text-xl border border-emerald-100">✅</div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-emerald-600">ซ่อมเสร็จสิ้น</p>
+                <h3 className="text-3xl font-black text-emerald-600 mt-1">{stats.completed}</h3>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-600 border border-emerald-100 text-xl">✅</div>
             </div>
           </div>
         )}
 
-        {/* Toolbar */}
-        <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm mb-6 flex flex-wrap gap-4 justify-between items-center">
-          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-            <input type="text" placeholder="🔍 ค้นหารหัส, ชื่ออุปกรณ์, ผู้แจ้ง..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20" />
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 outline-none font-semibold">
-              <option value="All">สถานะทั้งหมด</option>
-              <option value="Pending">รอดำเนินการ</option>
-              <option value="In Progress">กำลังซ่อม</option>
-              <option value="Completed">เสร็จสิ้น</option>
-            </select>
+        {/* SEARCH & FILTER */}
+        <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="relative w-full md:w-96">
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="🔍 ค้นหารหัส, ชื่ออุปกรณ์, สถานที่..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 font-medium transition-all"
+            />
           </div>
-          {currentUser.role === 'admin' && (
-            <button onClick={() => setShowAddModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-2xl text-xs font-bold shadow-md transition-all">
-              + แจ้งซ่อมอุปกรณ์ใหม่
+
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center space-x-2 bg-slate-50 p-1.5 border border-slate-200 rounded-2xl w-full sm:w-auto">
+              <Filter className="w-4 h-4 text-slate-400 ml-2" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-transparent text-xs text-slate-700 font-bold px-2 py-1.5 focus:outline-none cursor-pointer"
+              >
+                <option value="all">สถานะทั้งหมด</option>
+                <option value="pending">รอดำเนินการ</option>
+                <option value="in_progress">กำลังซ่อม</option>
+                <option value="completed">ซ่อมเสร็จสิ้น</option>
+                <option value="cancelled">ยกเลิกรายการ</option>
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="bg-transparent text-xs text-slate-700 font-bold px-2 py-1.5 focus:outline-none cursor-pointer border-l border-slate-200"
+              >
+                <option value="all">หมวดหมู่ทั้งหมด</option>
+                <option value="Hardware">Hardware</option>
+                <option value="Software">Software</option>
+                <option value="Network">Network</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => { setSearchTerm(''); setStatusFilter('all'); setCategoryFilter('all'); }}
+              className="p-3 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer"
+              title="ล้างตัวกรอง"
+            >
+              <RefreshCw className="w-4 h-4" />
             </button>
-          )}
+          </div>
         </div>
 
-        {/* ตารางข้อมูล */}
+        {/* TABLE LIST */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 border-b border-slate-200 uppercase font-extrabold text-slate-400">
-              <tr>
-                <th className="p-4">รหัสแจ้งซ่อม</th>
-                <th className="p-4">อุปกรณ์ & สถานที่</th>
-                <th className="p-4">อาการเสีย</th>
-                <th className="p-4">ผู้แจ้ง / วันที่</th>
-                <th className="p-4">สถานะ</th>
-                <th className="p-4 text-right">การจัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredTickets.length === 0 ? (
-                <tr><td colSpan={6} className="p-10 text-center text-slate-400 font-medium">ไม่พบข้อมูลการแจ้งซ่อมในระบบ</td></tr>
-              ) : (
-                filteredTickets.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50/80 transition-all">
-                    <td className="p-4 font-mono font-bold text-slate-800">{t.ticketCode || t.id.slice(0, 8)}</td>
-                    <td className="p-4">
-                      <div className="font-bold text-slate-800">{t.device}</div>
-                      <div className="text-[11px] text-slate-400">{t.location}</div>
-                    </td>
-                    <td className="p-4 max-w-xs truncate text-slate-600">{t.symptom}</td>
-                    <td className="p-4">
-                      <div className="text-slate-700 font-medium">{t.reporter}</div>
-                      <div className="text-[11px] text-slate-400">{t.date}</div>
-                    </td>
-                    <td className="p-4">
-                      {t.status === 'Pending' && <span className="px-3.5 py-1.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">รอดำเนินการ</span>}
-                      {t.status === 'In Progress' && <span className="px-3.5 py-1.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">กำลังซ่อม</span>}
-                      {t.status === 'Completed' && <span className="px-3.5 py-1.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">เสร็จสิ้น</span>}
-                    </td>
-                    <td className="p-4 text-right space-x-2">
-                      <button onClick={() => setSelectedTicket(t)} className="bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all shadow-sm">
-                        👁️ ดู Timeline
-                      </button>
-                      {currentUser.role === 'admin' && (
-                        <button onClick={() => { setAdminUpdateTicket(t); setUpdateStatusVal(t.status); setNewNote(t.note || ''); }} className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all shadow-sm">
-                          ⚙️ อัปเดตสถานะ
-                        </button>
-                      )}
-                    </td>
+          <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+            <h2 className="font-extrabold text-slate-800 text-sm">
+              {currentUser.role === 'admin' ? `รายการแจ้งซ่อมทั้งหมดในระบบ (${filteredTickets.length})` : `ประวัติการแจ้งซ่อมของคุณ (${filteredTickets.length})`}
+            </h2>
+          </div>
+
+          {filteredTickets.length === 0 ? (
+            <div className="p-16 text-center text-slate-400">
+              <AlertCircle className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+              <p className="text-sm font-bold text-slate-600">ไม่พบรายการแจ้งซ่อม</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {currentUser.role === 'user' ? 'คุณยังไม่มีประวัติการแจ้งซ่อม ลองกดปุ่ม "แจ้งซ่อมอุปกรณ์ใหม่" ด้านบนได้เลยครับ' : 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 text-slate-400 font-extrabold uppercase tracking-wider border-b border-slate-200">
+                    <th className="py-4 px-6">รหัสแจ้งซ่อม</th>
+                    <th className="py-4 px-6">อุปกรณ์ & สถานที่</th>
+                    <th className="py-4 px-6">ผู้แจ้งซ่อม</th>
+                    <th className="py-4 px-6">หมวดหมู่</th>
+                    <th className="py-4 px-6">สถานะ</th>
+                    <th className="py-4 px-6 text-right">การจัดการ</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredTickets.map((ticket) => {
+                    const badge = getStatusBadge(ticket.status);
+                    const BadgeIcon = badge.icon;
+                    return (
+                      <tr key={ticket.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-4 px-6 font-mono font-bold text-blue-600">{ticket.id}</td>
+                        <td className="py-4 px-6">
+                          <p className="font-bold text-slate-800">{ticket.deviceName}</p>
+                          <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-slate-400" /> {ticket.location}
+                          </p>
+                        </td>
+                        <td className="py-4 px-6">
+                          <p className="font-semibold text-slate-700">{ticket.reporterName}</p>
+                          <span className="inline-block text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold mt-0.5">
+                            {ticket.reporterRole}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="text-xs text-slate-600 bg-slate-100 px-3 py-1 rounded-xl font-medium">{ticket.issueCategory}</span>
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${badge.bg}`}>
+                            <BadgeIcon className="w-3.5 h-3.5" /> {badge.label}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-right space-x-2">
+                          <button
+                            onClick={() => setSelectedTicket(ticket)}
+                            className="bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all shadow-sm cursor-pointer"
+                          >
+                            👁️ ดู Timeline
+                          </button>
+                          {currentUser.role === 'admin' && (
+                            <button
+                              onClick={() => { setSelectedTicket(ticket); setUpdateData({ status: ticket.status, note: '' }); setIsUpdateStatusOpen(true); }}
+                              className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                              ⚙️ อัปเดตสถานะ
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </main>
 
-      {/* Modal: ดู Timeline */}
-      {selectedTicket && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto border border-slate-100">
-            <button onClick={() => setSelectedTicket(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 font-bold text-base">✕</button>
-
-            <div className="mb-4">
-              <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">{selectedTicket.ticketCode || selectedTicket.id}</span>
-              <h3 className="text-xl font-black text-slate-800 mt-2">{selectedTicket.device}</h3>
-            </div>
-
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-5 space-y-3 text-xs">
-              <div className="flex justify-between items-center border-b border-slate-200 pb-2.5">
-                <span className="text-slate-400 font-medium">สถานะปัจจุบัน:</span>
-                <span className="font-bold text-blue-600">{selectedTicket.status}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] text-slate-400 font-semibold">สถานที่ / ห้องปฏิบัติการ</p>
-                  <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.location}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 font-semibold">ผู้แจ้งซ่อม</p>
-                  <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.reporter}</p>
-                </div>
-              </div>
+      {/* MODAL: VIEW DETAILS & TIMELINE */}
+      {selectedTicket && !isUpdateStatusOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-100">
+            <div className="bg-slate-900 text-white p-6 flex justify-between items-center">
               <div>
-                <p className="text-[10px] text-slate-400 font-semibold">อาการเสียที่ระบุ</p>
-                <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.symptom}</p>
+                <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-lg">{selectedTicket.id}</span>
+                <h3 className="font-black text-lg text-white mt-1.5">{selectedTicket.deviceName}</h3>
               </div>
+              <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-white font-bold text-base cursor-pointer">✕</button>
             </div>
-
-            {selectedTicket.note && (
-              <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl mb-6 text-xs">
-                <p className="text-xs font-extrabold text-blue-800 mb-1">🛠️ หมายเหตุจากช่างซ่อม</p>
-                <p className="text-blue-900 font-medium">{selectedTicket.note}</p>
-              </div>
-            )}
-
-            <div className="mb-2">
-              <h4 className="font-black text-slate-800 text-xs mb-4">🕒 ประวัติการติดตามสถานะ (Real-time Timeline)</h4>
-              <div className="space-y-4 border-l-2 border-blue-500 ml-2 pl-4">
-                {(selectedTicket.timeline || []).map((item, idx) => (
-                  <div key={idx} className="relative">
-                    <p className="text-[10px] text-slate-400 font-medium">{item.date}</p>
-                    <p className="text-xs font-bold text-slate-800 mt-0.5">{item.status}</p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">{item.detail}</p>
+            <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto text-xs">
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-2.5">
+                  <span className="text-slate-400 font-medium">สถานะปัจจุบัน:</span>
+                  <span className="font-bold text-blue-600">{getStatusBadge(selectedTicket.status).label}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">สถานที่ / ห้อง</p>
+                    <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.location}</p>
                   </div>
-                ))}
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-semibold">ผู้แจ้งซ่อม</p>
+                    <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.reporterName} ({selectedTicket.reporterRole})</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 font-semibold">เบอร์โทรศัพท์ติดต่อ</p>
+                  <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.contactTel || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 font-semibold">อาการเสียที่ระบุ</p>
+                  <p className="font-bold text-slate-700 mt-0.5">{selectedTicket.description}</p>
+                </div>
+              </div>
+
+              {selectedTicket.technicianNote && (
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl">
+                  <p className="text-xs font-extrabold text-blue-800 mb-1">🛠️ หมายเหตุจากช่างซ่อม</p>
+                  <p className="text-blue-900 font-medium">{selectedTicket.technicianNote}</p>
+                </div>
+              )}
+
+              <div>
+                <h4 className="font-black text-slate-800 text-xs mb-3">🕒 ประวัติการติดตามสถานะ (Real-time Timeline)</h4>
+                <div className="space-y-4 border-l-2 border-blue-500 pl-4 ml-2">
+                  {(selectedTicket.timeline || []).map((t, index) => (
+                    <div key={index} className="relative">
+                      <p className="text-[10px] text-slate-400 font-medium">{t.time}</p>
+                      <p className="text-xs font-bold text-slate-800 mt-0.5">{t.note}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Admin อัปเดตสถานะ */}
-      {adminUpdateTicket && currentUser.role === 'admin' && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative border border-slate-100">
-            <button onClick={() => setAdminUpdateTicket(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 font-bold">✕</button>
-            <div className="bg-amber-500 text-white p-5 rounded-2xl mb-6 shadow-md shadow-amber-500/20">
-              <h3 className="font-black text-sm">⚙️ อัปเดตสถานะงานซ่อม (Admin Panel)</h3>
-              <p className="text-[11px] text-amber-100 mt-1">อุปกรณ์: {adminUpdateTicket.device}</p>
+      {/* MODAL: CREATE NEW TICKET */}
+      {isNewTicketOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100">
+            <div className="bg-slate-900 text-white p-6 flex justify-between items-center">
+              <h3 className="font-black text-base">+ ฟอร์มแจ้งซ่อมอุปกรณ์คอมพิวเตอร์</h3>
+              <button onClick={() => setIsNewTicketOpen(false)} className="text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
             </div>
-            <form onSubmit={handleSaveAdminUpdate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">เปลี่ยนสถานะเป็น *</label>
-                <select value={updateStatusVal} onChange={(e) => setUpdateStatusVal(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none">
-                  <option value="Pending">รอดำเนินการ (Pending)</option>
-                  <option value="In Progress">กำลังดำเนินการซ่อม (In Progress)</option>
-                  <option value="Completed">ซ่อมเสร็จสิ้น (Completed)</option>
-                  <option value="Cancelled">ยกเลิกรายการ (Cancelled)</option>
-                </select>
+            <form onSubmit={handleCreateTicket} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">ประเภทอุปกรณ์ *</label>
+                  <select
+                    value={formData.deviceType}
+                    onChange={(e) => setFormData({ ...formData, deviceType: e.target.value })}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-semibold outline-none"
+                  >
+                    <option value="Computer Set">Computer Set</option>
+                    <option value="Notebook">Notebook</option>
+                    <option value="Printer">Printer</option>
+                    <option value="Network Equipment">Network</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">หมวดหมู่อาการ *</label>
+                  <select
+                    value={formData.issueCategory}
+                    onChange={(e) => setFormData({ ...formData, issueCategory: e.target.value })}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-semibold outline-none"
+                  >
+                    <option value="Hardware">Hardware</option>
+                    <option value="Software">Software</option>
+                    <option value="Network">Network</option>
+                  </select>
+                </div>
               </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">หมายเหตุช่างซ่อม / บันทึกการปฏิบัติงาน</label>
-                <textarea rows="3" placeholder="เช่น กำลังเปลี่ยน RAM ตัวใหม่ทดสอบ..." value={newNote} onChange={(e) => setNewNote(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none font-medium"></textarea>
+                <label className="block font-bold text-slate-700 mb-1.5">ชื่ออุปกรณ์ / เลขครุภัณฑ์ *</label>
+                <input
+                  type="text"
+                  placeholder="เช่น PC ห้อง 502 (CS-502-01)"
+                  value={formData.deviceName}
+                  onChange={(e) => setFormData({ ...formData, deviceName: e.target.value })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium outline-none"
+                  required
+                />
               </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setAdminUpdateTicket(null)} className="px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-2xl">ยกเลิก</button>
-                <button type="submit" disabled={loading} className="px-6 py-3 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-2xl shadow-lg shadow-amber-600/20">
-                  {loading ? 'กำลังบันทึก...' : 'บันทึกการอัปเดต'}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">สถานที่ตั้ง / อาคาร *</label>
+                <input
+                  type="text"
+                  placeholder="เช่น อาคารวิทยบริการ ชั้น 5"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">ชื่อผู้แจ้งซ่อม *</label>
+                  <input
+                    type="text"
+                    value={formData.reporterName}
+                    onChange={(e) => setFormData({ ...formData, reporterName: e.target.value })}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium outline-none bg-slate-100"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">เบอร์โทรศัพท์ติดต่อ *</label>
+                  <input
+                    type="text"
+                    placeholder="081-234-5678"
+                    value={formData.contactTel}
+                    onChange={(e) => setFormData({ ...formData, contactTel: e.target.value })}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">รายละเอียดอาการเสีย *</label>
+                <textarea
+                  rows={3}
+                  placeholder="อธิบายอาการเสียเบื้องต้นอย่างละเอียด..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium outline-none"
+                  required
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsNewTicketOpen(false)}
+                  className="px-5 py-3 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-600/20 cursor-pointer"
+                >
+                  บันทึกและส่งเรื่องแจ้งซ่อม
                 </button>
               </div>
             </form>
@@ -500,39 +780,53 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal ฟอร์มแจ้งซ่อมใหม่ */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative border border-slate-100">
-            <button onClick={() => setShowAddModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 font-bold">✕</button>
-            <h3 className="text-lg font-black text-slate-800 mb-5">+ ฟอร์มแจ้งซ่อมอุปกรณ์คอมพิวเตอร์</h3>
-            <form onSubmit={handleAddTicket} className="space-y-4">
+      {/* MODAL: ADMIN UPDATE STATUS */}
+      {isUpdateStatusOpen && selectedTicket && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100">
+            <div className="bg-amber-600 text-white p-6 flex justify-between items-center shadow-md">
+              <h3 className="font-black text-sm">⚙️ อัปเดตสถานะงานซ่อม: {selectedTicket.id}</h3>
+              <button onClick={() => setIsUpdateStatusOpen(false)} className="text-white font-bold cursor-pointer">✕</button>
+            </div>
+            <form onSubmit={handleUpdateStatus} className="p-6 space-y-4 text-xs">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">ชื่ออุปกรณ์ / เลขครุภัณฑ์ *</label>
-                <input type="text" required placeholder="เช่น PC ห้องคอม 502 - เครื่อง 12" value={newDevice} onChange={(e) => setNewDevice(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none font-medium" />
+                <label className="block font-bold text-slate-700 mb-1.5">เปลี่ยนสถานะใหม่ *</label>
+                <select
+                  value={updateData.status}
+                  onChange={(e) => setUpdateData({ ...updateData, status: e.target.value })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none"
+                >
+                  <option value="pending">รอดำเนินการ (Pending)</option>
+                  <option value="in_progress">กำลังดำเนินการซ่อม (In Progress)</option>
+                  <option value="completed">ซ่อมเสร็จสิ้น (Completed)</option>
+                  <option value="cancelled">ยกเลิกรายการ (Cancelled)</option>
+                </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">หมวดหมู่อาการ</label>
-                  <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none font-semibold">
-                    <option value="Hardware">Hardware (อุปกรณ์ชำรุด)</option>
-                    <option value="Software">Software (ซอฟต์แวร์)</option>
-                    <option value="Network">Network (ระบบเน็ตเวิร์ก)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">สถานที่ / อาคาร *</label>
-                  <input type="text" required placeholder="เช่น อาคารวิทยบริการ ชั้น 5" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none font-medium" />
-                </div>
-              </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">รายละเอียดอาการเสีย *</label>
-                <textarea required rows="3" placeholder="ระบุอาการเสียอย่างละเอียด..." value={newSymptom} onChange={(e) => setNewSymptom(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none font-medium"></textarea>
+                <label className="block font-bold text-slate-700 mb-1.5">หมายเหตุช่างซ่อม / ผลการปฏิบัติงาน</label>
+                <textarea
+                  rows={3}
+                  placeholder="เช่น เปลี่ยน RAM ตัวใหม่ทดสอบเรียบร้อย..."
+                  value={updateData.note}
+                  onChange={(e) => setUpdateData({ ...updateData, note: e.target.value })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium outline-none"
+                />
               </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-2xl">ยกเลิก</button>
-                <button type="submit" disabled={loading} className="px-6 py-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-600/20">
-                  {loading ? 'กำลังส่งข้อมูล...' : 'บันทึกและส่งเรื่องแจ้งซ่อม'}
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsUpdateStatusOpen(false)}
+                  className="px-5 py-3 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl font-bold shadow-lg shadow-amber-600/20 cursor-pointer"
+                >
+                  บันทึกการอัปเดต
                 </button>
               </div>
             </form>

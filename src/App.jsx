@@ -47,7 +47,7 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
     
-    // ดึงข้อมูลรายการแจ้งซ่อม
+    // ดึงข้อมูลรายการแจ้งซ่อมแบบ Real-time
     const qTickets = query(collection(db, "tickets"), orderBy("createdAt", "desc"));
     const unsubscribeTickets = onSnapshot(qTickets, (snapshot) => {
       const ticketsData = snapshot.docs.map(docSnap => ({
@@ -59,7 +59,7 @@ export default function App() {
       console.error("Firestore Tickets Error:", error);
     });
 
-    // ดึงข้อมูลผู้ใช้งาน (เก็บใน collection ชื่อ users)
+    // ดึงข้อมูลผู้ใช้งานแบบ Real-time
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const usersData = snapshot.docs.map(docSnap => ({
         id: docSnap.id,
@@ -208,7 +208,6 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันลบผู้ใช้งานออกจากระบบ
   const handleDeleteUser = async (userId) => {
     if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบบัญชีผู้ใช้นี้ออกจากระบบ?")) return;
     try {
@@ -361,7 +360,6 @@ export default function App() {
           )}
         </div>
 
-        {/* เมนูแท็บสลับสำหรับ Admin (จัดการงานซ่อม vs จัดการผู้ใช้งาน) */}
         {currentUser.role === 'admin' && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -400,7 +398,6 @@ export default function App() {
           </>
         )}
 
-        {/* แสดงส่วนจัดการรายการแจ้งซ่อม */}
         {activeTab === 'tickets' && (
           <>
             <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm mb-6 flex flex-wrap gap-4 justify-between items-center">
@@ -477,7 +474,6 @@ export default function App() {
           </>
         )}
 
-        {/* แสดงส่วนจัดการรายชื่อผู้ใช้งาน (เฉพาะ Admin) */}
         {activeTab === 'users' && currentUser.role === 'admin' && (
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
@@ -497,7 +493,7 @@ export default function App() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {usersList.length === 0 ? (
-                  <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-medium">ยังไม่มีข้อมูลผู้ใช้งานในระบบ (ผู้ใช้จะถูกบันทึกอัตโนมัติเมื่อมีการสมัครสมาชิกใหม่)</td></tr>
+                  <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-medium">ยังไม่มีข้อมูลผู้ใช้งานในระบบ</td></tr>
                 ) : (
                   usersList.map((u) => (
                     <tr key={u.id} className="hover:bg-slate-50/80 transition-all">
@@ -524,7 +520,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Modal ดูรายละเอียด */}
       {selectedTicket && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-xl w-full p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto border border-slate-100">
@@ -581,7 +576,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal อัปเดตสถานะ (Admin) */}
       {adminUpdateTicket && currentUser.role === 'admin' && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative border border-slate-100">
@@ -615,7 +609,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal เพิ่มแจ้งซ่อม */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative border border-slate-100">

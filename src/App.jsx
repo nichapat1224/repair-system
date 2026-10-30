@@ -7,6 +7,7 @@ import {
   signOut,
   collection, 
   addDoc, 
+  setDoc,
   deleteDoc,
   onSnapshot, 
   updateDoc, 
@@ -28,7 +29,7 @@ export default function App() {
 
   const [tickets, setTickets] = useState([]);
   const [usersList, setUsersList] = useState([]);
-  const [activeTab, setActiveTab] = useState('tickets'); // 'tickets' หรือ 'users'
+  const [activeTab, setActiveTab] = useState('tickets');
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -47,7 +48,6 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
     
-    // ดึงข้อมูลรายการแจ้งซ่อมแบบ Real-time
     const qTickets = query(collection(db, "tickets"), orderBy("createdAt", "desc"));
     const unsubscribeTickets = onSnapshot(qTickets, (snapshot) => {
       const ticketsData = snapshot.docs.map(docSnap => ({
@@ -55,19 +55,14 @@ export default function App() {
         ...docSnap.data()
       }));
       setTickets(ticketsData);
-    }, (error) => {
-      console.error("Firestore Tickets Error:", error);
     });
 
-    // ดึงข้อมูลผู้ใช้งานแบบ Real-time
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const usersData = snapshot.docs.map(docSnap => ({
         id: docSnap.id,
         ...docSnap.data()
       }));
       setUsersList(usersData);
-    }, (error) => {
-      console.error("Firestore Users Error:", error);
     });
 
     return () => {
@@ -95,8 +90,8 @@ export default function App() {
         }
         userRes = await createUserWithEmailAndPassword(auth, email, password);
         
-        // บันทึกข้อมูลผู้ใช้ลงใน Firestore collection "users"
-        await addDoc(collection(db, "users"), {
+        // บันทึกข้อมูลผู้ใช้ลง Firestore โดยใช้ UID เป็น Document ID ป้องกันข้อมูลซ้ำ
+        await setDoc(doc(db, "users", userRes.user.uid), {
           uid: userRes.user.uid,
           name: name,
           email: email,
@@ -114,7 +109,7 @@ export default function App() {
         role: loginRole
       });
     } catch (err) {
-      setAuthError('อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชีนี้ยังไม่ได้ลงทะเบียน');
+      setAuthError('อีเมลหรือรหัสผ่านไม่ถูกต้อง หรืออีเมลนี้ถูกใช้งานแล้ว');
     } finally {
       setLoading(false);
     }
@@ -200,7 +195,7 @@ export default function App() {
   };
 
   const handleDeleteTicket = async (ticketId) => {
-    if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบรายการแจ้งซ่อมนี้ออกจากระบบ?")) return;
+    if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบรายการแจ้งซ่อมนี้?")) return;
     try {
       await deleteDoc(doc(db, "tickets", ticketId));
     } catch (err) {
@@ -493,7 +488,7 @@ export default function App() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {usersList.length === 0 ? (
-                  <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-medium">ยังไม่มีข้อมูลผู้ใช้งานในระบบ</td></tr>
+                  <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-medium">ยังไม่มีข้อมูลผู้ใช้งานในระบบ (ลองกดสมัครสมาชิกใหม่เพื่อทดสอบ)</td></tr>
                 ) : (
                   usersList.map((u) => (
                     <tr key={u.id} className="hover:bg-slate-50/80 transition-all">

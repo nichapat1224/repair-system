@@ -12,6 +12,7 @@ import {
   onSnapshot, 
   updateDoc, 
   doc, 
+  getDoc,
   serverTimestamp, 
   query, 
   orderBy 
@@ -82,6 +83,9 @@ export default function App() {
     setLoading(true);
     try {
       let userRes;
+      let userName = '';
+      let userRole = loginRole;
+
       if (isRegister) {
         if (!name) {
           setAuthError('กรุณากรอกชื่อ-นามสกุล');
@@ -89,24 +93,36 @@ export default function App() {
           return;
         }
         userRes = await createUserWithEmailAndPassword(auth, email, password);
+        userName = name;
         
-        // บันทึกข้อมูลผู้ใช้ลง Firestore โดยใช้ UID เป็น Document ID ป้องกันข้อมูลซ้ำ
+        // บันทึกข้อมูลลงใน Firestore collection "users" โดยใช้ UID เป็น ID
         await setDoc(doc(db, "users", userRes.user.uid), {
           uid: userRes.user.uid,
-          name: name,
+          name: userName,
           email: email,
-          role: loginRole,
+          role: userRole,
           createdAt: serverTimestamp()
         });
       } else {
         userRes = await signInWithEmailAndPassword(auth, email, password);
+        
+        // ดึงชื่อจริงจาก collection "users" ตาม UID ของผู้ใช้ที่ล็อกอิน
+        const userDocRef = doc(db, "users", userRes.user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (userDocSnap.exists()) {
+          userName = userDocSnap.data().name;
+          userRole = userDocSnap.data().role || loginRole;
+        } else {
+          userName = email.split('@')[0];
+        }
       }
 
       setCurrentUser({
         uid: userRes.user.uid,
         email: userRes.user.email,
-        name: isRegister ? name : (loginRole === 'admin' ? `ผู้ดูแลระบบ (${email.split('@')[0]})` : `ผู้ใช้งาน (${email.split('@')[0]})`),
-        role: loginRole
+        name: userName,
+        role: userRole
       });
     } catch (err) {
       setAuthError('อีเมลหรือรหัสผ่านไม่ถูกต้อง หรืออีเมลนี้ถูกใช้งานแล้ว');
@@ -283,12 +299,12 @@ export default function App() {
               {isRegister && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อ-นามสกุล</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="สมชาย ใจดี" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="โอลิเวีย ใจดี" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
                 </div>
               )}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">อีเมล</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@college.ac.th" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="olivia@gmail.com" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">รหัสผ่าน</label>
@@ -488,7 +504,7 @@ export default function App() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {usersList.length === 0 ? (
-                  <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-medium">ยังไม่มีข้อมูลผู้ใช้งานในระบบ (ลองกดสมัครสมาชิกใหม่เพื่อทดสอบ)</td></tr>
+                  <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-medium">ยังไม่มีข้อมูลผู้ใช้งานในระบบ</td></tr>
                 ) : (
                   usersList.map((u) => (
                     <tr key={u.id} className="hover:bg-slate-50/80 transition-all">
